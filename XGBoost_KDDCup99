@@ -1,0 +1,244 @@
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+import matplotlib.pyplot as plt
+from xgboost import plot_importance
+
+# Load the UNSW-NB15 dataset
+# Adjust the file path as needed for your environment
+df = pd.read_csv('/content/kddcup99_minmax.csv')
+print(df.columns)
+
+df.head()
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+
+# Load the data (replace with your data loading method)
+# df = pd.read_csv('your_dataset.csv')
+
+# Display basic information
+print("Dataset Shape:", df.shape)
+print("\nFeature names:")
+print(df.columns.tolist())
+
+# Check for NaN values in the target
+print("\nChecking for NaN values in target variable:")
+print("Number of NaN values in 'label':", df['label'].isna().sum())
+
+# Handle NaN values in the target by removing those rows
+if df['label'].isna().sum() > 0:
+    print(f"Removing {df['label'].isna().sum()} rows with NaN target values")
+    df = df.dropna(subset=['label'])
+
+# Preprocess the data
+# Assuming 'label' or 'attack_cat' is your target column
+# For binary classification (normal vs. attack)
+X = df.drop(['label', 'id'], axis=1, errors='ignore')  # Adjust column names as needed
+y = df['label']  # Adjust target column name as needed
+
+# Print class distribution to verify
+unique_classes = np.unique(y)
+print("\nUnique classes in target:", unique_classes)
+print("Number of unique classes:", len(unique_classes))
+print("Class distribution:", pd.Series(y).value_counts())
+
+# Handle categorical features if present
+X = pd.get_dummies(X)
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Verify no NaNs in training and test sets
+print("\nVerifying no NaNs in split data:")
+print("NaNs in X_train:", X_train.isna().sum().sum())
+print("NaNs in y_train:", y_train.isna().sum())
+print("NaNs in X_test:", X_test.isna().sum().sum())
+print("NaNs in y_test:", y_test.isna().sum())
+
+# Fill any remaining NaNs in feature matrices (if needed)
+if X_train.isna().sum().sum() > 0:
+    X_train = X_train.fillna(0)
+if X_test.isna().sum().sum() > 0:
+    X_test = X_test.fillna(0)
+
+# Train XGBoost model with proper settings based on number of classes
+num_classes = len(unique_classes)
+if num_classes == 2:
+    print("\nTraining binary classification model")
+    model = xgb.XGBClassifier(
+        objective='binary:logistic',
+        n_estimators=100,
+        learning_rate=0.1,
+        random_state=42
+    )
+else:
+    print(f"\nTraining multi-class classification model with {num_classes} classes")
+    model = xgb.XGBClassifier(
+        objective='multi:softprob',
+        num_class=num_classes,
+        n_estimators=100,
+        learning_rate=0.1,
+        random_state=42
+    )
+
+model.fit(X_train, y_train)
+
+# Get feature importance
+feature_importance = model.feature_importances_
+features = X.columns
+
+# Create DataFrame of features and their importance scores
+feature_importance_df = pd.DataFrame({
+    'Feature': features,
+    'Importance': feature_importance
+})
+
+# Sort by importance
+feature_importance_df = feature_importance_df.sort_values('Importance', ascending=False)
+
+# Display top 30 features
+print("\nTop 30 most important features:")
+print(feature_importance_df.head(30))
+
+# Plot feature importance
+plt.figure(figsize=(12, 8))
+plt.bar(feature_importance_df['Feature'].head(30), feature_importance_df['Importance'].head(30))
+plt.xticks(rotation=90)
+plt.title('Top 30 Feature Importance in Network Security Dataset')
+plt.tight_layout()
+plt.savefig('feature_importance.png')  # Save figure to disk
+plt.show()
+
+# Select top N features (e.g., top 30)
+top_features = feature_importance_df['Feature'].head(30).tolist()
+X_train_selected = X_train[top_features]
+X_test_selected = X_test[top_features]
+
+# Train a new model with selected features
+if num_classes == 2:
+    model_selected = xgb.XGBClassifier(
+        objective='binary:logistic',
+        n_estimators=100,
+        learning_rate=0.1,
+        random_state=42
+    )
+else:
+    model_selected = xgb.XGBClassifier(
+        objective='multi:softprob',
+        num_class=num_classes,
+        n_estimators=100,
+        learning_rate=0.1,
+        random_state=42
+    )
+
+model_selected.fit(X_train_selected, y_train)
+
+# Evaluate full model
+y_pred_full = model.predict(X_test)
+print("\nFull Model Performance:")
+print("Accuracy:", accuracy_score(y_test, y_pred_full))
+print(classification_report(y_test, y_pred_full))
+
+# Evaluate model with selected features
+y_pred_selected = model_selected.predict(X_test_selected)
+print("\nSelected Features Model Performance:")
+print("Accuracy:", accuracy_score(y_test, y_pred_selected))
+print(classification_report(y_test, y_pred_selected))
+
+# Save selected features to CSV
+selected_features_df = pd.DataFrame({'Selected_Features': top_features})
+selected_features_df.to_csv('selected_features_network.csv', index=False)
+print("\nSelected features saved to 'selected_features_network.csv'")
+
+# Save the models if needed
+model.save_model('full_model.json')
+model_selected.save_model('selected_features_model.json')
+print("\nModels saved to disk.")
+
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Method 1: Using feature_importances_ attribute (default)
+feature_importances = model.feature_importances_
+feature_names = X.columns.tolist()
+
+# Create DataFrame for better visualization
+feature_importance_df = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': feature_importances
+})
+
+# Sort by importance (descending)
+feature_importance_df = feature_importance_df.sort_values('Importance', ascending=False)
+
+# Display the ranking
+print("Feature Ranking:")
+print(feature_importance_df)
+
+# Method 2: Using get_score() for different importance types
+# Create dictionary for different importance types
+importance_types = ['weight', 'gain', 'cover', 'total_gain', 'total_cover']
+importance_dicts = {}
+
+for imp_type in importance_types:
+    # This will return a dictionary with feature names as keys and importance as values
+    # Note: Only features used in the model will appear
+    try:
+        importance_dict = model.get_booster().get_score(importance_type=imp_type)
+        importance_dicts[imp_type] = importance_dict
+    except:
+        print(f"Importance type {imp_type} not available")
+
+# Convert to DataFrames and handle missing features
+importance_dfs = {}
+for imp_type, imp_dict in importance_dicts.items():
+    df = pd.DataFrame({
+        'Feature': list(imp_dict.keys()),
+        f'Importance_{imp_type}': list(imp_dict.values())
+    })
+    df = df.sort_values(f'Importance_{imp_type}', ascending=False)
+    importance_dfs[imp_type] = df
+    print(f"\nFeature Ranking based on {imp_type}:")
+    print(df.head(10))  # Top 10 features
+
+# Visualize feature importance (using default importance)
+plt.figure(figsize=(12, 8))
+plt.barh(feature_importance_df['Feature'].head(15),
+         feature_importance_df['Importance'].head(15))
+plt.xlabel('Importance')
+plt.ylabel('Feature')
+plt.title('Top 15 Features by Importance')
+plt.gca().invert_yaxis()  # To have the highest importance at the top
+plt.tight_layout()
+plt.show()
+
+# More detailed visualization with seaborn
+plt.figure(figsize=(14, 10))
+sns.barplot(x='Importance', y='Feature', data=feature_importance_df.head(20))
+plt.title('Top 20 Feature Importance')
+plt.tight_layout()
+plt.show()
+
+# Visualize using built-in XGBoost function
+plt.figure(figsize=(12, 8))
+xgb.plot_importance(model, max_num_features=15, importance_type='gain')
+plt.tight_layout()
+plt.show()
+
+# Save feature rankings to CSV files
+feature_importance_df.to_csv('feature_ranking_default.csv', index=False)
+print("\nDefault feature ranking saved to 'feature_ranking_default.csv'")
+
+# Save rankings for different importance types
+for imp_type, df in importance_dfs.items():
+    df.to_csv(f'feature_ranking_{imp_type}.csv', index=False)
+    print(f"Feature ranking based on {imp_type} saved to 'feature_ranking_{imp_type}.csv'")
